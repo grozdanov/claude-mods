@@ -1,0 +1,13 @@
+{
+  "name": "claude-usage-mod",
+  "description": "A calm usage and prompt-cache band for Claude Code.",
+  "owner": {
+    "name": "Nikolay G"
+  },
+  "plugins": [
+    {
+      "name": "usage",
+      "source": "./"
+    }
+  ]
+}
