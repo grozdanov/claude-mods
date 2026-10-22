@@ -61,13 +61,13 @@ test('warm after a reply: folded, minutes left and the cached price; the chevron
     const ui = await $.ui.mount({ ...band(160), surface })
     expect((await ui.find({ type: 'Text', text: /m left$/ }))?.text).toBe(' 54m left')
     expect((await ui.find({ type: 'Text', text: /next/ }))?.text).toBe(' · $0.05 next')
-    expect((await ui.find({ type: 'Button', key: 'cache-fold' }))?.props.label).toBe('∧')
+    expect((await ui.find({ type: 'Button', key: 'cache-fold' }))?.props.label).toBe('∧∧')
     await ui.press({ key: 'cache-fold' })
-    expect((await ui.find({ type: 'Button', key: 'cache-fold' }))?.props.label).toBe('∨')
+    expect((await ui.find({ type: 'Button', key: 'cache-fold' }))?.props.label).toBe('∨∨')
     if (surface === 'terminal') {
       expect((await ui.find({ type: 'Text', text: /\(you\)/ }))?.text).toContain('Opus $0.05 (you)')
     } else {
-      expect((await ui.find({ type: 'Svg', alt: /Cache warm/ } as { type: string }))?.props.alt).toContain('Goes cold in 54 minutes')
+      expect((await ui.findAll({ type: 'Svg' })).map(x => String(x.props.alt)).find(a => /Cache warm/.test(a))).toContain('Goes cold in 54 minutes')
     }
     await ui.press({ key: 'cache-fold' })
     await ui.unmount()
@@ -81,16 +81,16 @@ test('cold after an hour: open, price first, and the choice to fold holds until 
   await clock.advance(HOUR + 8 * 60_000)
   const ui = await $.ui.mount({ ...band(160), surface: 'desktop' })
   // Open: the card carries the price; the row leaves it to the card.
-  expect((await ui.find({ type: 'Button', key: 'cache-fold' }))?.props.label).toBe('∨')
-  expect((await ui.find({ type: 'Svg', alt: /Cache cold/ } as { type: string }))?.props.alt).toContain('Opus: $1.96')
+  expect((await ui.find({ type: 'Button', key: 'cache-fold' }))?.props.label).toBe('∨∨')
+  expect((await ui.findAll({ type: 'Svg' })).map(x => String(x.props.alt)).find(a => /Cache cold/.test(a))).toContain('Opus: $1.96')
   await ui.press({ key: 'cache-fold' })
   // Folded: the row leads with the price, then the idle time.
-  expect((await ui.find({ type: 'Button', key: 'cache-fold' }))?.props.label).toBe('∧')
+  expect((await ui.find({ type: 'Button', key: 'cache-fold' }))?.props.label).toBe('∧∧')
   expect((await ui.find({ type: 'Text', text: /next$/ }))?.text).toBe(' $1.96 next')
   expect((await ui.find({ type: 'Text', text: /idle/ }))?.text).toBe(' · idle 1h 8m')
   // A tick later the fold still holds.
   await clock.advance(60_000)
-  expect((await ui.find({ type: 'Button', key: 'cache-fold' }))?.props.label).toBe('∧')
+  expect((await ui.find({ type: 'Button', key: 'cache-fold' }))?.props.label).toBe('∧∧')
   await ui.unmount()
 })
 
@@ -119,7 +119,7 @@ test('context fill and session spend sit on the row; ochre from 80%; the card ad
     if (surface === 'terminal') {
       expect((await ui.find({ type: 'Text', text: /read from cache/ }))?.text).toBe('94% read from cache')
     } else {
-      expect((await ui.find({ type: 'Svg', alt: /Cache warm/ } as { type: string }))?.props.alt).toContain('Last turn 94% read from cache. Session $4.12.')
+      expect((await ui.findAll({ type: 'Svg' })).map(x => String(x.props.alt)).find(a => /Cache warm/.test(a))).toContain('Last turn 94% read from cache. Session $4.12.')
     }
     await ui.press({ key: 'cache-fold' })
     await ui.unmount()

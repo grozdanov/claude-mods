@@ -184,14 +184,14 @@ const text = (x: number, y: number, s: string, o: TextOpts): string =>
 const r1 = (n: number): number => Math.round(n * 10) / 10
 
 /** An overline: tiny, semibold, uppercase, tracked. The one place the band uses capitals for words. */
-const overline = (x: number, y: number, s: string, p: Palette): string => text(x, y, s, { size: 12, weight: 600, fill: p.muted, tracking: 0.08 })
+const overline = (x: number, y: number, s: string, p: Palette, size = 12): string => text(x, y, s, { size, weight: 600, fill: p.muted, tracking: 0.08 })
 
 /** A slim rounded track with a filled share, the card's one kind of meter. */
-const track = (x: number, y: number, w: number, share: number, fill: string, p: Palette): string => {
+const track = (x: number, y: number, w: number, share: number, fill: string, p: Palette, h = 4): string => {
   const f = Math.max(0, Math.min(1, share)) * w
   return (
-    `<rect x="${r1(x)}" y="${r1(y)}" width="${r1(w)}" height="4" rx="2" fill="${p.empty}"/>` +
-    (f > 0 ? `<rect x="${r1(x)}" y="${r1(y)}" width="${r1(Math.max(4, f))}" height="4" rx="2" fill="${fill}"/>` : '')
+    `<rect x="${r1(x)}" y="${r1(y)}" width="${r1(w)}" height="${h}" rx="${h / 2}" fill="${p.empty}"/>` +
+    (f > 0 ? `<rect x="${r1(x)}" y="${r1(y)}" width="${r1(Math.max(h, f))}" height="${h}" rx="${h / 2}" fill="${fill}"/>` : '')
   )
 }
 
@@ -254,8 +254,8 @@ export const ROBO_SIZE = 20
 export const roboSvg = (mode: Mode, p: Palette): string => svgDoc(ROBO_SIZE, ROBO_SIZE, roboShapes(0, 0, ROBO_SIZE, mode, p), [])
 
 // ---------- The cache card ----------
-/** The card's layout for its width in px: three zones in a row, two over one, or one column. */
-export const cardKindOf = (W: number): Kind => (W >= 900 ? 'wide' : W >= 560 ? 'stacked' : 'tight')
+/** How much the card's type and meters are scaled: bigger when the band is wide enough to spare it. */
+export const cardScale = (W: number): number => (W >= 900 ? 1.45 : W >= 640 ? 1.2 : 1)
 
 /**
  * The band's width in CSS pixels for a column count: a cell is about 12 px in
@@ -265,27 +265,38 @@ export const cardKindOf = (W: number): Kind => (W >= 900 ? 'wide' : W >= 560 ? '
 export const bandPx = (columns: number): number => (columns + 5) * 12
 
 const PAD = 12 // outer margin and the gap between zones
-const IN = 16 // inner padding of a zone
-const ZONE_H = 136
 
 export const cardSvg = (v: CacheView, W: number, p: Palette): { source: string; w: number; h: number; alt: string } => {
   const cold = v.mode === 'cold'
   const hue = hueOf(p, v.mode)
+  const k = cardScale(W)
+  const n = (px: number): number => Math.round(px * k)
+  const IN = n(16)
+  const ZONE_H = n(136)
   const zone = (x: number, y: number, w: number, h: number) =>
     `<rect x="${r1(x)}" y="${r1(y)}" width="${r1(w)}" height="${h}" rx="8" fill="${p.ink}" fill-opacity="${p.zoneAlpha}"/>`
+  const OV = n(12)
+  const BIG = n(30)
+  const BODY = n(14)
+  const BAR = Math.max(4, n(5))
+
+  // A big figure with its small unit beside it, each placed from the font's own advances.
+  const bigWith = (x: number, y: number, big: string, unit: string): string =>
+    text(x, y, big, { size: BIG, weight: 500, fill: p.ink, tracking: -0.02 }) +
+    text(x + measure(big, BIG, 500, -0.02) + n(8), y, unit, { size: n(15), fill: p.muted })
 
   // How long since the last reply, and how much of the warm hour is left.
   const zoneIdle = (x: number, y: number, w: number) => {
     const cx = x + IN
     const cw = w - IN * 2
     let g = zone(x, y, w, ZONE_H)
-    g += roboShapes(cx - 2, y + 12, 18, v.mode, p)
-    const chip = chipShapes(cx + 20, y + 12, WORD[v.mode], hue, p.onAccent, 12)
-    g += chip.svg + overline(cx + 20 + chip.w + 8, y + 27, 'IDLE', p)
-    g += text(cx, y + 70, v.idle, { size: 30, weight: 500, fill: p.ink, tracking: -0.02 })
-    g += track(cx, y + 86, cw, cold ? 0 : v.leftMin / TTL_MIN, hue, p)
-    g += text(cx, y + 116, cold ? 'cache expired' : `cold in ${v.leftMin}m`, { size: 14, weight: 500, fill: hue })
-    g += text(cx + cw, y + 116, '1h after a reply', { size: 14, fill: p.muted, anchor: 'end' })
+    g += roboShapes(cx - 2, y + n(12), n(18), v.mode, p)
+    const chip = chipShapes(cx + n(20), y + n(12), WORD[v.mode], hue, p.onAccent, n(12))
+    g += chip.svg + overline(cx + n(20) + chip.w + 8, y + n(27), 'IDLE', p, OV)
+    g += text(cx, y + n(70), v.idle, { size: BIG, weight: 500, fill: p.ink, tracking: -0.02 })
+    g += track(cx, y + n(86), cw, cold ? 0 : v.leftMin / TTL_MIN, hue, p, BAR)
+    g += text(cx, y + n(116), cold ? 'cache expired' : `cold in ${v.leftMin}m`, { size: BODY, weight: 500, fill: hue })
+    g += text(cx + cw, y + n(116), '1h after a reply', { size: BODY, fill: p.muted, anchor: 'end' })
     return g
   }
 
@@ -295,12 +306,10 @@ export const cardSvg = (v: CacheView, W: number, p: Palette): { source: string; 
     const cw = w - IN * 2
     const share = v.window > 0 ? Math.min(1, v.tokens / v.window) : 0
     let g = zone(x, y, w, ZONE_H)
-    g += overline(cx, y + 27, cold ? 'RE-SENT IN FULL' : 'IN CACHE', p)
-    g +=
-      `<text x="${cx}" y="${y + 70}" fill="${p.ink}"><tspan font-size="30" font-weight="500" letter-spacing="-0.02em">${tok(v.tokens)}</tspan>` +
-      `<tspan font-size="15" font-weight="400" fill="${p.muted}" dx="6">tokens</tspan></text>`
-    g += track(cx, y + 86, cw, share, p.ink, p)
-    g += text(cx, y + 116, v.window > 0 ? `${Math.round(share * 100)}% of the ${tok(v.window)} context` : 'context window unknown', { size: 14, fill: p.muted })
+    g += overline(cx, y + n(27), cold ? 'RE-SENT IN FULL' : 'IN CACHE', p, OV)
+    g += bigWith(cx, y + n(70), tok(v.tokens), 'tokens')
+    g += track(cx, y + n(86), cw, share, share * 100 >= CTX_AT ? p.amber : p.ink, p, BAR)
+    g += text(cx, y + n(116), v.window > 0 ? `${Math.round(share * 100)}% of the ${tok(v.window)} context` : 'context window unknown', { size: BODY, fill: p.muted })
     return g
   }
 
@@ -311,13 +320,11 @@ export const cardSvg = (v: CacheView, W: number, p: Palette): { source: string; 
     const hit = v.hit
     const ok = hit !== null && hit * 100 >= HIT_OK
     let g = zone(x, y, w, ZONE_H)
-    g += overline(cx, y + 27, 'LAST TURN', p)
-    g +=
-      `<text x="${cx}" y="${y + 70}" fill="${p.ink}"><tspan font-size="30" font-weight="500" letter-spacing="-0.02em">${hit === null ? '–' : `${Math.round(hit * 100)}%`}</tspan>` +
-      `<tspan font-size="15" font-weight="400" fill="${p.muted}" dx="6">from cache</tspan></text>`
-    g += track(cx, y + 86, cw, hit ?? 0, ok ? p.sage : p.amber, p)
+    g += overline(cx, y + n(27), 'LAST TURN', p, OV)
+    g += bigWith(cx, y + n(70), hit === null ? '–' : `${Math.round(hit * 100)}%`, 'from cache')
+    g += track(cx, y + n(86), cw, hit ?? 0, ok ? p.sage : p.amber, p, BAR)
     const spent = v.spend === null ? 'session cost unknown' : `session ${usd(v.spend)}${v.cold > 0 ? ` · ${usd(v.cold)} re-writes` : ''}`
-    g += text(cx, y + 116, spent, { size: 14, fill: p.muted })
+    g += text(cx, y + n(116), spent, { size: BODY, fill: p.muted })
     return g
   }
 
@@ -327,55 +334,33 @@ export const cardSvg = (v: CacheView, W: number, p: Palette): { source: string; 
     const cx = x + IN
     const cw = w - IN * 2
     let g = zone(x, y, w, h)
-    g += overline(cx, y + 27, cold ? 'NEXT MESSAGE COSTS' : 'NEXT MESSAGE COSTS, CACHED', p)
+    g += overline(cx, y + n(27), cold ? 'NEXT MESSAGE COSTS' : 'NEXT, CACHED', p, OV)
     const top = Math.max(...MODELS.map(m => coldCost(m, v.tokens)))
-    const nameW = 104
-    const priceW = 60
+    const nameW = n(104)
+    const priceW = n(60)
     const barX = cx + nameW
     const barW = Math.max(24, cw - nameW - priceW - 8)
     MODELS.forEach((m, i) => {
       const mine = m.id === v.mine
-      const by = y + 54 + i * 22
+      const by = y + n(54) + i * n(22)
       const cost = costOf(m, v.mode, v.tokens)
-      g += text(cx, by, m.name, { size: 14, weight: mine ? 600 : 400, fill: mine ? p.ink : p.muted })
-      if (mine) g += chipShapes(Math.round(cx + measure(m.name, 14, 600) + 6), by - 13, 'YOU', hue, p.onAccent, 10).svg
-      g += track(barX, by - 6, barW, top > 0 ? cost / top : 0, mine ? hue : mix(p.muted, p.bg, 0.3), p)
-      g += text(cx + cw, by, usd(cost), { size: 14, weight: mine ? 600 : 400, fill: mine ? p.ink : p.muted, anchor: 'end' })
+      g += text(cx, by, m.name, { size: BODY, weight: mine ? 600 : 400, fill: mine ? p.ink : p.muted })
+      if (mine) g += chipShapes(Math.round(cx + measure(m.name, BODY, 600) + 6), by - n(13), 'YOU', hue, p.onAccent, n(10)).svg
+      g += track(barX, by - n(6), barW, top > 0 ? cost / top : 0, mine ? hue : mix(p.muted, p.bg, 0.3), p, BAR)
+      g += text(cx + cw, by, usd(cost), { size: BODY, weight: mine ? 600 : 400, fill: mine ? p.ink : p.muted, anchor: 'end' })
     })
     return g
   }
 
+  // Always a 2 x 2 grid: idle and cache on top, last turn and cost beneath.
   const inner = W - PAD * 2
-  let H: number
-  let g: string
-  const kind = cardKindOf(W)
-  if (kind === 'wide') {
-    const w1 = Math.round(inner * 0.22)
-    const w2 = Math.round(inner * 0.24)
-    const w3 = Math.round(inner * 0.24)
-    const w4 = inner - w1 - w2 - w3 - PAD * 3
-    H = ZONE_H
-    g =
-      zoneIdle(PAD, 0, w1) +
-      zoneSize(PAD + w1 + PAD, 0, w2) +
-      zoneTurn(PAD + w1 + w2 + PAD * 2, 0, w3) +
-      zoneCost(PAD + w1 + w2 + w3 + PAD * 3, 0, w4, ZONE_H)
-  } else if (kind === 'stacked') {
-    const half = (inner - PAD) / 2
-    H = ZONE_H * 2 + PAD
-    g =
-      zoneIdle(PAD, 0, half) +
-      zoneSize(PAD + half + PAD, 0, half) +
-      zoneTurn(PAD, ZONE_H + PAD, half) +
-      zoneCost(PAD + half + PAD, ZONE_H + PAD, half, ZONE_H)
-  } else {
-    H = ZONE_H * 4 + PAD * 3
-    g =
-      zoneIdle(PAD, 0, inner) +
-      zoneSize(PAD, ZONE_H + PAD, inner) +
-      zoneTurn(PAD, (ZONE_H + PAD) * 2, inner) +
-      zoneCost(PAD, (ZONE_H + PAD) * 3, inner, ZONE_H)
-  }
+  const half = (inner - PAD) / 2
+  const H = ZONE_H * 2 + PAD
+  const g =
+    zoneIdle(PAD, 0, half) +
+    zoneSize(PAD + half + PAD, 0, half) +
+    zoneTurn(PAD, ZONE_H + PAD, half) +
+    zoneCost(PAD + half + PAD, ZONE_H + PAD, half, ZONE_H)
   const top = 6
   const h = top + H + PAD
   const body = `<rect width="${W}" height="${h}" fill="${p.bg}"/><g transform="translate(0 ${top})">${g}</g>`

@@ -12,7 +12,7 @@ Next to the windows, the band shows two more figures once there is a reply:
 - **CTX** is how full the context window is, as a dot bar. It turns ochre from 80%, when compaction is near.
 - **SESSION** is what the session has cost so far, from the app's own ledger.
 
-The chevron at the top right folds the cache card: **∧** opens it and **∨** folds it away. Warm starts folded and cold starts open, so you see the price before you send. The card shows how long you've been idle, how many tokens are in the cache, how much of the last turn the cache served (**hit rate**, sage from 80%, ochre below), the session spend with the part that came from cold re-writes, and what the next message would cost on each model, with yours marked YOU. In the terminal the card is plain text.
+The chevron at the top right folds the cache card: **∧∧** opens it and **∨∨** folds it away. Warm starts folded and cold starts open, so you see the price before you send. The card shows how long you've been idle, how many tokens are in the cache, how much of the last turn the cache served (**hit rate**, sage from 80%, ochre below), the session spend with the part that came from cold re-writes, and what the next message would cost on each model, with yours marked YOU. The card is a 2 × 2 grid, and its type grows with the width of the band. In the terminal the card is plain text.
 
 ## Install
 
@@ -36,9 +36,9 @@ The band draws in the terminal and the desktop app; the VS Code extension does n
 
 ## Fits any width
 
-- **Wide:** everything sits on one row.
+- **Wide:** the windows, CTX, SESSION and the cache state sit on one row.
 - **Half width:** each window stacks into a small block.
-- **Narrow:** CTX and SESSION take a row of their own, and the cache another.
+- **Narrow:** the windows, CTX and SESSION stay in one row of blocks, and the cache state moves to a row of its own.
 - **Terminal:** the same facts as plain text.
 
 ## Theme

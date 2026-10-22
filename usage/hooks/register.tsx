@@ -30,9 +30,9 @@ const TICK_MS = 30_000
 /** Cells a desktop SVG takes per px, as bandPx counts them. */
 const PX_PER_CELL = 12
 /** Cells the fold chevron takes. */
-const BUTTON_CELLS = 5
+const BUTTON_CELLS = 6
 /** The fold chevron: up opens the card, down folds it away. */
-export const CHEVRON = { open: '∨', closed: '∧' } as const
+export const CHEVRON = { open: '∨∨', closed: '∧∧' } as const
 
 const windows = atom({ plugin: 'usage', key: 'windows' } as const, [] as Window[])
 const cache = atom({ plugin: 'usage', key: 'cache' } as const, null as CacheFacts | null)
@@ -291,8 +291,8 @@ export const register: Register = on => {
     const badgeCells = Svg ? Math.ceil((ROBO_SIZE + 6 + chip.w) / PX_PER_CELL) + 1 : len(WORD[mode]) + 2
     const sum = view ? summaryOf(view) : null
     const summaryCells = sum ? 1 + len(sum.lead) + (sum.rest ? 3 + len(sum.rest) : 0) : 0
-    // On desktop an open card carries the badge itself, so the row drops it; the terminal keeps it.
-    const inlineCache = view !== null && !(open && Svg)
+    // The cache state always sits in the row beside the windows, open card or not.
+    const inlineCache = view !== null
     const ctxWide = view ? ctxOf(view, CELLS) : null
     const spendText = view && view.spend !== null ? usd(view.spend) : null
     const extra =
@@ -455,11 +455,9 @@ export const register: Register = on => {
         <Box key="row" flexDirection="row" paddingX={1} paddingY="xs">
           {label}
           {usage}
+          {meters('stacked')}
           {grow}
           {button}
-        </Box>,
-        <Box key="meters" flexDirection="row" paddingX={1} paddingY="xs">
-          {meters('tight')}
         </Box>,
         <Box key="cache" flexDirection="row" paddingX={1} paddingY="xs" alignItems="center">
           {badge}
