@@ -61,9 +61,9 @@ test('warm after a reply: folded, minutes left and the cached price; the chevron
     const ui = await $.ui.mount({ ...band(160), surface })
     expect((await ui.find({ type: 'Text', text: /m left$/ }))?.text).toBe(' 54m left')
     expect((await ui.find({ type: 'Text', text: /next/ }))?.text).toBe(' · $0.05 next')
-    expect((await ui.find({ type: 'Button', key: 'cache-fold' }))?.props.label).toBe('∧∧')
+    expect((await ui.find({ type: 'Button', key: 'cache-fold' }))?.props.label).toBe('∧')
     await ui.press({ key: 'cache-fold' })
-    expect((await ui.find({ type: 'Button', key: 'cache-fold' }))?.props.label).toBe('∨∨')
+    expect((await ui.find({ type: 'Button', key: 'cache-fold' }))?.props.label).toBe('∨')
     if (surface === 'terminal') {
       expect((await ui.find({ type: 'Text', text: /\(you\)/ }))?.text).toContain('Opus $0.05 (you)')
     } else {
@@ -81,20 +81,20 @@ test('cold after an hour: open, price first, and the choice to fold holds until 
   await clock.advance(HOUR + 8 * 60_000)
   const ui = await $.ui.mount({ ...band(160), surface: 'desktop' })
   // Open: the card carries the price; the row leaves it to the card.
-  expect((await ui.find({ type: 'Button', key: 'cache-fold' }))?.props.label).toBe('∨∨')
+  expect((await ui.find({ type: 'Button', key: 'cache-fold' }))?.props.label).toBe('∨')
   expect((await ui.findAll({ type: 'Svg' })).map(x => String(x.props.alt)).find(a => /Cache cold/.test(a))).toContain('Opus: $1.96')
   await ui.press({ key: 'cache-fold' })
   // Folded: the row leads with the price, then the idle time.
-  expect((await ui.find({ type: 'Button', key: 'cache-fold' }))?.props.label).toBe('∧∧')
+  expect((await ui.find({ type: 'Button', key: 'cache-fold' }))?.props.label).toBe('∧')
   expect((await ui.find({ type: 'Text', text: /next$/ }))?.text).toBe(' $1.96 next')
   expect((await ui.find({ type: 'Text', text: /idle/ }))?.text).toBe(' · idle 1h 8m')
   // A tick later the fold still holds.
   await clock.advance(60_000)
-  expect((await ui.find({ type: 'Button', key: 'cache-fold' }))?.props.label).toBe('∧∧')
+  expect((await ui.find({ type: 'Button', key: 'cache-fold' }))?.props.label).toBe('∧')
   await ui.unmount()
 })
 
-test('narrow: windows stack and the cache takes its own row; light theme draws on Linen', async ($, on) => {
+test('narrow: windows stack and the cache stays on the same line; light theme draws on Linen', async ($, on) => {
   const clock = world(on, 'light')
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await reply($)
@@ -102,7 +102,8 @@ test('narrow: windows stack and the cache takes its own row; light theme draws o
   const ui = await $.ui.mount({ ...band(40), surface: 'terminal' })
   expect((await ui.find({ type: 'Text', text: /^resets 4h/ }))?.text).toBe('resets 4h 29m')
   expect((await ui.find({ type: 'Text', text: /^ WARM $/ }))?.props.backgroundColor).toBe('#4a6a3c')
-  expect((await ui.find({ type: 'Box', key: 'cache' }))).toBeDefined()
+  expect((await ui.find({ type: 'Box', key: 'block' }))).toBeDefined()
+  expect(await ui.find({ type: 'Box', key: 'cache' })).toBeUndefined()
   await ui.unmount()
 })
 

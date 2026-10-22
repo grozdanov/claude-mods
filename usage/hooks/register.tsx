@@ -30,9 +30,9 @@ const TICK_MS = 30_000
 /** Cells a desktop SVG takes per px, as bandPx counts them. */
 const PX_PER_CELL = 12
 /** Cells the fold chevron takes. */
-const BUTTON_CELLS = 6
+const BUTTON_CELLS = 5
 /** The fold chevron: up opens the card, down folds it away. */
-export const CHEVRON = { open: '∨∨', closed: '∧∧' } as const
+export const CHEVRON = { open: '∨', closed: '∧' } as const
 
 const windows = atom({ plugin: 'usage', key: 'windows' } as const, [] as Window[])
 const cache = atom({ plugin: 'usage', key: 'cache' } as const, null as CacheFacts | null)
@@ -431,8 +431,8 @@ export const register: Register = on => {
           {button}
         </Box>
       )
-    } else if (plan.kind === 'stacked') {
-      // The cache becomes a third block, the same shape as 7D and 5H.
+    } else {
+      // Stacked and tight: everything stays on one line; the cache becomes another block, the same shape as 7D and 5H.
       rows = (
         <Box key="row" flexDirection="row" paddingX={1} paddingY="xs">
           {label}
@@ -449,21 +449,6 @@ export const register: Register = on => {
           {button}
         </Box>
       )
-    } else {
-      // Narrow: the cache gets its own row under the usage blocks.
-      rows = [
-        <Box key="row" flexDirection="row" paddingX={1} paddingY="xs">
-          {label}
-          {usage}
-          {meters('stacked')}
-          {grow}
-          {button}
-        </Box>,
-        <Box key="cache" flexDirection="row" paddingX={1} paddingY="xs" alignItems="center">
-          {badge}
-          {summary}
-        </Box>,
-      ]
     }
 
     let card = null
