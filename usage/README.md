@@ -7,7 +7,12 @@ After your first reply it also tracks the prompt cache. The cache keeps your cha
 - **WARM** (sage, the robot bobs slowly): the cache is live. The band shows the minutes left and what your next message costs at the cache-read rate.
 - **COLD** (teal, the robot is still): the hour has passed, so your next message re-sends the whole chat. The band shows the price first.
 
-**Show** opens the cache card and **Hide** folds it. Warm starts folded and cold starts open, so you see the price before you send. The card shows how long you've been idle, how many tokens are in the cache, and what the next message would cost on each model, with yours marked YOU. In the terminal the card is plain text.
+Next to the windows, the band shows two more figures once there is a reply:
+
+- **CTX** is how full the context window is, as a dot bar. It turns ochre from 80%, when compaction is near.
+- **SESSION** is what the session has cost so far, from the app's own ledger.
+
+The chevron at the top right folds the cache card: **∧** opens it and **∨** folds it away. Warm starts folded and cold starts open, so you see the price before you send. The card shows how long you've been idle, how many tokens are in the cache, how much of the last turn the cache served (**hit rate**, sage from 80%, ochre below), the session spend with the part that came from cold re-writes, and what the next message would cost on each model, with yours marked YOU. In the terminal the card is plain text.
 
 ## Install
 
@@ -33,7 +38,7 @@ The band draws in the terminal and the desktop app; the VS Code extension does n
 
 - **Wide:** everything sits on one row.
 - **Half width:** each window stacks into a small block.
-- **Narrow:** the cache moves to a row of its own.
+- **Narrow:** CTX and SESSION take a row of their own, and the cache another.
 - **Terminal:** the same facts as plain text.
 
 ## Theme
@@ -42,7 +47,7 @@ The band follows your Claude theme setting. A light theme draws on Linen (#EAE4D
 
 ## Cost
 
-Running the band costs nothing. It reads the app's own figures and never calls a model. Prices are estimates from the `MODELS` table in `hooks/art.ts`, not from your bill, so edit that table when prices change. Subagents don't count: only your main chat resets the cache clock.
+Running the band costs nothing. It reads the app's own figures and never calls a model. Session spend is the app's own figure. The next-message prices and the cold re-write figure are estimates from the `MODELS` table in `hooks/art.ts`, not from your bill, so edit that table when prices change. Subagents don't count: only your main chat resets the cache clock.
 
 ## Files
 

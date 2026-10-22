@@ -8,6 +8,16 @@ export type Window = { kind: string; percentUsed: number; resetsAt?: string }
  */
 export type CacheFacts = { lastAt: number; tokens: number; window: number; model: string | null }
 
+/** The last main-thread turn's input split, in tokens: served by the cache, written to it, uncached. */
+export type LastTurn = { read: number; write: number; input: number }
+
+/**
+ * The session's spend: dollars from the engine's own ledger (null where the
+ * host keeps none), the estimated cost of re-writes after the cache went cold,
+ * and whether the turn in flight began cold.
+ */
+export type Spend = { usd: number | null; cold: number; pendingCold: boolean }
+
 /** Whether the cache card is open, remembered only for the state it was set in. */
 export type Fold = { mode: 'warm' | 'cold'; open: boolean }
 
@@ -16,6 +26,6 @@ export type Tone = 'light' | 'dark'
 
 declare module 'claude-code' {
   interface PluginState {
-    usage: { windows: Window[]; cache: CacheFacts | null; fold: Fold | null; tone: Tone }
+    usage: { windows: Window[]; cache: CacheFacts | null; last: LastTurn | null; spend: Spend; fold: Fold | null; tone: Tone }
   }
 }

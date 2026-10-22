@@ -106,6 +106,15 @@ export const coldCost = (m: Model, tokens: number): number => (tokens / 1e6) * m
 export const warmCost = (m: Model, tokens: number): number => (tokens / 1e6) * m.read
 export const costOf = (m: Model, mode: Mode, tokens: number): number => (mode === 'cold' ? coldCost(m, tokens) : warmCost(m, tokens))
 export const usd = (n: number): string => '$' + n.toFixed(2)
+/** Where the context bar turns ochre, as a percent of the window. */
+export const CTX_AT = 80
+/** Where the last turn's cache hit rate stops reading as healthy, as a percent. */
+export const HIT_OK = 80
+/** The share of a turn's input the cache served, 0 to 1; null when it had no input. */
+export const hitOf = (read: number, write: number, input: number): number | null => {
+  const all = read + write + input
+  return all > 0 ? read / all : null
+}
 export const tok = (n: number): string => (n >= 1e6 ? `${Number((n / 1e6).toFixed(1))}M` : `${Math.round(n / 1000)}k`)
 
 /** A span the way the band writes it: 18m, 2h 5m, 3d 9h. */
@@ -132,6 +141,12 @@ export type CacheView = {
   window: number
   /** This session's MODELS id, or null when the model isn't priced. */
   mine: string | null
+  /** Share of the last turn's input the cache served, 0 to 1; null before a turn. */
+  hit: number | null
+  /** What the session has cost, in dollars; null when the host keeps no ledger. */
+  spend: number | null
+  /** Of that, the estimated cost of cache re-writes after the cache had gone cold. */
+  cold: number
 }
 
 export const mineModel = (v: CacheView): Model | undefined => MODELS.find(m => m.id === v.mine)
@@ -289,6 +304,23 @@ export const cardSvg = (v: CacheView, W: number, p: Palette): { source: string; 
     return g
   }
 
+  // How well the last turn used the cache, and what the session has cost.
+  const zoneTurn = (x: number, y: number, w: number) => {
+    const cx = x + IN
+    const cw = w - IN * 2
+    const hit = v.hit
+    const ok = hit !== null && hit * 100 >= HIT_OK
+    let g = zone(x, y, w, ZONE_H)
+    g += overline(cx, y + 27, 'LAST TURN', p)
+    g +=
+      `<text x="${cx}" y="${y + 70}" fill="${p.ink}"><tspan font-size="30" font-weight="500" letter-spacing="-0.02em">${hit === null ? '–' : `${Math.round(hit * 100)}%`}</tspan>` +
+      `<tspan font-size="15" font-weight="400" fill="${p.muted}" dx="6">from cache</tspan></text>`
+    g += track(cx, y + 86, cw, hit ?? 0, ok ? p.sage : p.amber, p)
+    const spent = v.spend === null ? 'session cost unknown' : `session ${usd(v.spend)}${v.cold > 0 ? ` · ${usd(v.cold)} re-writes` : ''}`
+    g += text(cx, y + 116, spent, { size: 14, fill: p.muted })
+    return g
+  }
+
   // What the next message costs on each model. One scale for both states (the
   // dearest cold re-cache), so a warm read shows as the small bar it is.
   const zoneCost = (x: number, y: number, w: number, h: number) => {
@@ -318,26 +350,41 @@ export const cardSvg = (v: CacheView, W: number, p: Palette): { source: string; 
   let g: string
   const kind = cardKindOf(W)
   if (kind === 'wide') {
-    const w1 = Math.round(inner * 0.28)
-    const w2 = Math.round(inner * 0.3)
-    const w3 = inner - w1 - w2 - PAD * 2
+    const w1 = Math.round(inner * 0.22)
+    const w2 = Math.round(inner * 0.24)
+    const w3 = Math.round(inner * 0.24)
+    const w4 = inner - w1 - w2 - w3 - PAD * 3
     H = ZONE_H
-    g = zoneIdle(PAD, 0, w1) + zoneSize(PAD + w1 + PAD, 0, w2) + zoneCost(PAD + w1 + w2 + PAD * 2, 0, w3, ZONE_H)
+    g =
+      zoneIdle(PAD, 0, w1) +
+      zoneSize(PAD + w1 + PAD, 0, w2) +
+      zoneTurn(PAD + w1 + w2 + PAD * 2, 0, w3) +
+      zoneCost(PAD + w1 + w2 + w3 + PAD * 3, 0, w4, ZONE_H)
   } else if (kind === 'stacked') {
     const half = (inner - PAD) / 2
     H = ZONE_H * 2 + PAD
-    g = zoneIdle(PAD, 0, half) + zoneSize(PAD + half + PAD, 0, half) + zoneCost(PAD, ZONE_H + PAD, inner, ZONE_H)
+    g =
+      zoneIdle(PAD, 0, half) +
+      zoneSize(PAD + half + PAD, 0, half) +
+      zoneTurn(PAD, ZONE_H + PAD, half) +
+      zoneCost(PAD + half + PAD, ZONE_H + PAD, half, ZONE_H)
   } else {
-    H = ZONE_H * 3 + PAD * 2
-    g = zoneIdle(PAD, 0, inner) + zoneSize(PAD, ZONE_H + PAD, inner) + zoneCost(PAD, (ZONE_H + PAD) * 2, inner, ZONE_H)
+    H = ZONE_H * 4 + PAD * 3
+    g =
+      zoneIdle(PAD, 0, inner) +
+      zoneSize(PAD, ZONE_H + PAD, inner) +
+      zoneTurn(PAD, (ZONE_H + PAD) * 2, inner) +
+      zoneCost(PAD, (ZONE_H + PAD) * 3, inner, ZONE_H)
   }
   const top = 6
   const h = top + H + PAD
   const body = `<rect width="${W}" height="${h}" fill="${p.bg}"/><g transform="translate(0 ${top})">${g}</g>`
   const mine = mineModel(v)
   const price = mine ? ` Next message on ${mine.name}: ${usd(costOf(mine, v.mode, v.tokens))}.` : ''
+  const turn = v.hit === null ? '' : ` Last turn ${Math.round(v.hit * 100)}% read from cache.`
+  const spent = v.spend === null ? '' : ` Session ${usd(v.spend)}.`
   const alt = cold
-    ? `Cache cold. Idle ${v.idle}. Next message re-sends ${tok(v.tokens)} tokens.${price}`
-    : `Cache warm. Goes cold in ${v.leftMin} minutes. ${tok(v.tokens)} tokens cached.${price}`
+    ? `Cache cold. Idle ${v.idle}. Next message re-sends ${tok(v.tokens)} tokens.${turn}${spent}${price}`
+    : `Cache warm. Goes cold in ${v.leftMin} minutes. ${tok(v.tokens)} tokens cached.${turn}${spent}${price}`
   return { source: svgDoc(W, h, body, [400, 500, 600]), w: W, h, alt }
 }

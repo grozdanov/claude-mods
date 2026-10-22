@@ -13,11 +13,12 @@ const band = (bodyColumns: number) =>
   }) as const
 
 /** The engine beneath the band: two windows (7D nearly spent), a 245k context on Opus, a dark theme. */
-const world = (on: On, theme = 'dark') => {
+const world = (on: On, theme = 'dark', tokens = 245_000) => {
   const clock = mock.clock(on, { now: START })
   const usage = {
     startedAt: START,
-    context: { tokens: 245_000, window: 1_000_000 },
+    context: { tokens, window: 1_000_000 },
+    cost: { usd: 4.12 },
     rateLimits: [
       { kind: 'five_hour', percentUsed: 4, resetsAt: new Date(START + 4.5 * HOUR).toISOString() },
       { kind: 'seven_day', percentUsed: 90, resetsAt: new Date(START + 81 * HOUR).toISOString() },
@@ -33,7 +34,7 @@ const world = (on: On, theme = 'dark') => {
 }
 
 const reply = ($: Engine) =>
-  $.turn.complete({ answer: 'ok', durationMs: 1000, isAborted: false, turnId: 't1', reason: 'answer', usage: { model: 'claude-opus-5-5' } } as never)
+  $.turn.complete({ answer: 'ok', durationMs: 1000, isAborted: false, turnId: 't1', reason: 'answer', usage: { model: 'claude-opus-5-5', input_tokens: 5_000, output_tokens: 800, cache_read_input_tokens: 230_000, cache_creation_input_tokens: 10_000 } } as never)
 
 test('windows show what is left, 7D first, with LOW and reset times; the spend limit is left out', async ($, on) => {
   world(on)
@@ -51,7 +52,7 @@ test('windows show what is left, 7D first, with LOW and reset times; the spend l
   }
 })
 
-test('warm after a reply: folded, minutes left and the cached price; Show opens the card', async ($, on) => {
+test('warm after a reply: folded, minutes left and the cached price; the chevron opens the card', async ($, on) => {
   const clock = world(on)
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await reply($)
@@ -60,9 +61,9 @@ test('warm after a reply: folded, minutes left and the cached price; Show opens 
     const ui = await $.ui.mount({ ...band(160), surface })
     expect((await ui.find({ type: 'Text', text: /m left$/ }))?.text).toBe(' 54m left')
     expect((await ui.find({ type: 'Text', text: /next/ }))?.text).toBe(' · $0.05 next')
-    expect((await ui.find({ type: 'Button', key: 'cache-fold' }))?.props.label).toBe('Show')
+    expect((await ui.find({ type: 'Button', key: 'cache-fold' }))?.props.label).toBe('∧')
     await ui.press({ key: 'cache-fold' })
-    expect((await ui.find({ type: 'Button', key: 'cache-fold' }))?.props.label).toBe('Hide')
+    expect((await ui.find({ type: 'Button', key: 'cache-fold' }))?.props.label).toBe('∨')
     if (surface === 'terminal') {
       expect((await ui.find({ type: 'Text', text: /\(you\)/ }))?.text).toContain('Opus $0.05 (you)')
     } else {
@@ -80,16 +81,16 @@ test('cold after an hour: open, price first, and the choice to fold holds until 
   await clock.advance(HOUR + 8 * 60_000)
   const ui = await $.ui.mount({ ...band(160), surface: 'desktop' })
   // Open: the card carries the price; the row leaves it to the card.
-  expect((await ui.find({ type: 'Button', key: 'cache-fold' }))?.props.label).toBe('Hide')
+  expect((await ui.find({ type: 'Button', key: 'cache-fold' }))?.props.label).toBe('∨')
   expect((await ui.find({ type: 'Svg', alt: /Cache cold/ } as { type: string }))?.props.alt).toContain('Opus: $1.96')
   await ui.press({ key: 'cache-fold' })
   // Folded: the row leads with the price, then the idle time.
-  expect((await ui.find({ type: 'Button', key: 'cache-fold' }))?.props.label).toBe('Show')
+  expect((await ui.find({ type: 'Button', key: 'cache-fold' }))?.props.label).toBe('∧')
   expect((await ui.find({ type: 'Text', text: /next$/ }))?.text).toBe(' $1.96 next')
   expect((await ui.find({ type: 'Text', text: /idle/ }))?.text).toBe(' · idle 1h 8m')
   // A tick later the fold still holds.
   await clock.advance(60_000)
-  expect((await ui.find({ type: 'Button', key: 'cache-fold' }))?.props.label).toBe('Show')
+  expect((await ui.find({ type: 'Button', key: 'cache-fold' }))?.props.label).toBe('∧')
   await ui.unmount()
 })
 
@@ -102,5 +103,51 @@ test('narrow: windows stack and the cache takes its own row; light theme draws o
   expect((await ui.find({ type: 'Text', text: /^resets 4h/ }))?.text).toBe('resets 4h 29m')
   expect((await ui.find({ type: 'Text', text: /^ WARM $/ }))?.props.backgroundColor).toBe('#4a6a3c')
   expect((await ui.find({ type: 'Box', key: 'cache' }))).toBeDefined()
+  await ui.unmount()
+})
+
+test('context fill and session spend sit on the row; ochre from 80%; the card adds hit rate and spend', async ($, on) => {
+  const clock = world(on)
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await reply($)
+  await clock.advance(60_000)
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ ...band(160), surface })
+    expect((await ui.find({ type: 'Text', text: /^ 25%$/ }))?.text).toBe(' 25%')
+    expect((await ui.find({ type: 'Text', text: /^\$4\.12$/ }))?.text).toBe('$4.12')
+    await ui.press({ key: 'cache-fold' })
+    if (surface === 'terminal') {
+      expect((await ui.find({ type: 'Text', text: /read from cache/ }))?.text).toBe('94% read from cache')
+    } else {
+      expect((await ui.find({ type: 'Svg', alt: /Cache warm/ } as { type: string }))?.props.alt).toContain('Last turn 94% read from cache. Session $4.12.')
+    }
+    await ui.press({ key: 'cache-fold' })
+    await ui.unmount()
+  }
+})
+
+test('context bar turns ochre at 80% full', async ($, on) => {
+  const clock = world(on, 'dark', 820_000)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await reply($)
+  await clock.advance(60_000)
+  const ui = await $.ui.mount({ ...band(160), surface: 'terminal' })
+  expect((await ui.find({ type: 'Text', text: /^ 82%$/ }))?.props.color).toBe('#e3a35e')
+  await ui.unmount()
+})
+
+test('a turn that finds the cache cold adds its re-write to the card\'s cold figure', async ($, on) => {
+  const clock = world(on)
+  on('turn.step', async function* () {
+    return { turnId: 't2', index: 0, answer: '', toolUses: [], stopReason: 'end_turn', usage: null } as never
+  })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await reply($)
+  await clock.advance(HOUR + 60_000)
+  for await (const _ of $.turn.step({ turnId: 't2', index: 0, model: 'claude-opus-5-5' } as never)) void _
+  await reply($)
+  const ui = await $.ui.mount({ ...band(160), surface: 'terminal' })
+  await ui.press({ key: 'cache-fold' })
+  expect((await ui.find({ type: 'Text', text: /cold re-writes/ }))?.text).toBe(' · $0.08 from cold re-writes')
   await ui.unmount()
 })

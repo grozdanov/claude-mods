@@ -1,10 +1,10 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderChildren } from 'claude-code'
 
-import type { CacheFacts, Fold, Tone, Window } from '../types'
+import type { CacheFacts, Fold, LastTurn, Spend, Tone, Window } from '../types'
 import {
-  MODELS, PALETTE, ROBO_SIZE, TTL_MIN, TTL_MS, WORD,
-  bandPx, cardSvg, chipSvg, costOf, familyOf, fmtSpan, hueOf, mineModel, roboSvg, toneOf, tok, usd,
+  CTX_AT, HIT_OK, MODELS, PALETTE, ROBO_SIZE, TTL_MIN, TTL_MS, WORD,
+  bandPx, cardSvg, chipSvg, coldCost, costOf, familyOf, fmtSpan, hitOf, hueOf, mineModel, roboSvg, toneOf, tok, usd,
 } from './art'
 import type { CacheView, Palette } from './art'
 
@@ -15,7 +15,10 @@ import type { CacheView, Palette } from './art'
 // After the first reply it also tracks the prompt cache: WARM (sage, the robot
 // bobs slowly) for an hour after the last main-thread request, then COLD (teal,
 // the robot is still) with what the next message costs to re-send the chat.
-// Show / Hide folds the cache card; warm starts folded, cold starts open, and a
+// Beside the windows it shows how full the context is (CTX, ochre from 80%) and
+// what the session has cost (SESSION). The card adds how much of the last turn
+// the cache served and how much of the spend was cold re-writes. A chevron at
+// the top right folds the card; warm starts folded, cold starts open, and a
 // choice holds until the cache flips. Zero token cost: it reads the engine's own
 // figures and draws, and never calls a model. Subagents don't move the clock.
 
@@ -26,11 +29,15 @@ const LOW_AT = 15
 const TICK_MS = 30_000
 /** Cells a desktop SVG takes per px, as bandPx counts them. */
 const PX_PER_CELL = 12
-/** Cells the Show / Hide button takes. */
-const BUTTON_CELLS = 8
+/** Cells the fold chevron takes. */
+const BUTTON_CELLS = 5
+/** The fold chevron: up opens the card, down folds it away. */
+export const CHEVRON = { open: '∨', closed: '∧' } as const
 
 const windows = atom({ plugin: 'usage', key: 'windows' } as const, [] as Window[])
 const cache = atom({ plugin: 'usage', key: 'cache' } as const, null as CacheFacts | null)
+const last = atom({ plugin: 'usage', key: 'last' } as const, null as LastTurn | null)
+const spend = atom({ plugin: 'usage', key: 'spend' } as const, { usd: null, cold: 0, pendingCold: false } as Spend)
 const fold = atom({ plugin: 'usage', key: 'fold' } as const, null as Fold | null)
 const tone = atom({ plugin: 'usage', key: 'tone' } as const, 'dark' as Tone)
 
@@ -53,7 +60,12 @@ export const fmtReset = (iso: string | undefined, now: number): string => {
 }
 
 /** What the cache drawings read, or null until a request and its context size are known. */
-export const viewOf = (c: CacheFacts | null, now: number): CacheView | null => {
+export const viewOf = (
+  c: CacheFacts | null,
+  now: number,
+  l: LastTurn | null = null,
+  sp: Spend | null = null,
+): CacheView | null => {
   if (!c || c.lastAt <= 0 || c.tokens <= 0) return null
   const idleMs = Math.max(0, now - c.lastAt)
   const idleMin = Math.floor(idleMs / 60000)
@@ -65,7 +77,18 @@ export const viewOf = (c: CacheFacts | null, now: number): CacheView | null => {
     tokens: c.tokens,
     window: c.window,
     mine: familyOf(c.model),
+    hit: l ? hitOf(l.read, l.write, l.input) : null,
+    spend: sp?.usd ?? null,
+    cold: sp?.cold ?? 0,
   }
+}
+
+/** The context bar: whole percent used, and whether it has crossed the ochre line. */
+export const ctxOf = (v: CacheView, cells: number): { pct: number; on: number; off: number; high: boolean } | null => {
+  if (v.window <= 0) return null
+  const pct = Math.max(0, Math.min(100, Math.round((v.tokens / v.window) * 100)))
+  const on = Math.max(0, Math.min(cells, Math.round((pct / 100) * cells)))
+  return { pct, on, off: cells - on, high: pct >= CTX_AT }
 }
 
 /** One window as the band writes it. */
@@ -95,9 +118,9 @@ const blockLen = (p: Part, cells: number): number =>
 export type Plan = { kind: 'wide' | 'stacked' | 'tight'; resetsWord: boolean }
 
 /** The roomiest layout that fits the band's columns: one row, stacked blocks, or the cache on a row of its own. */
-export const planOf = (parts: Part[], cacheCells: number, hasButton: boolean, columns: number): Plan => {
+export const planOf = (parts: Part[], cacheCells: number, hasButton: boolean, columns: number, extra = 0): Plan => {
   const label = 5 + 2
-  const tail = (cacheCells > 0 ? cacheCells + 2 : 0) + (hasButton ? BUTTON_CELLS : 0)
+  const tail = (cacheCells > 0 ? cacheCells + 2 : 0) + (hasButton ? BUTTON_CELLS : 0) + extra
   for (const resetsWord of [true, false]) {
     const row = label + parts.reduce((n, p) => n + wideLen(p, CELLS, resetsWord) + 3, 0) + tail
     if (row <= columns) return { kind: 'wide', resetsWord }
@@ -117,6 +140,12 @@ const readTone = async ($: EngineInterface): Promise<void> => {
   await update($, tone, () => toneOf(row?.value))
 }
 
+/** The session's dollars from the engine's own ledger, onto the spend. */
+const measureSpend = async ($: EngineInterface): Promise<void> => {
+  const u = await $.session.usage()
+  await update($, spend, s => ({ ...s, usd: u.cost?.usd ?? s.usd }))
+}
+
 /** Fresh context figures from the engine onto the cache facts, when it has them. */
 const measureCache = async ($: EngineInterface, lastAt: number | null, model: string | null): Promise<void> => {
   const u = await $.session.usage()
@@ -133,6 +162,7 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const r = await next(e)
     await pull($).catch(() => undefined)
+    await measureSpend($).catch(() => undefined)
     await readTone($).catch(() => undefined)
     $.clock.every(TICK_MS, () => $.ui.invalidate('ui.render'))
     return r
@@ -149,6 +179,9 @@ export const register: Register = on => {
     if (e.changed.includes('rateLimits')) {
       await update($, windows, () => clean(e.rateLimits))
     }
+    if (e.changed.includes('cost')) {
+      await measureSpend($).catch(() => undefined)
+    }
     if (e.changed.includes('context') && e.context.tokens && e.context.tokens > 0) {
       const tokens = e.context.tokens
       await update($, cache, c => (c ? { ...c, tokens, window: e.context.window || c.window } : c))
@@ -161,6 +194,9 @@ export const register: Register = on => {
     const r = await next(e)
     if (e.source === 'clear' || e.source === 'compact') {
       await update($, cache, () => null)
+      await update($, last, () => null)
+      await update($, spend, () => ({ usd: null, cold: 0, pendingCold: false }))
+      await measureSpend($).catch(() => undefined)
       await update($, fold, () => null)
     } else if ((e.source === 'resume' || e.source === 'fork') && typeof e.seconds_since_last_response === 'number') {
       const now = await $.clock.now()
@@ -169,6 +205,9 @@ export const register: Register = on => {
       const model = typeof e.model === 'string' ? e.model : await $.session.model()
       const tokens = typeof e.context_tokens === 'number' ? e.context_tokens : 0
       await update($, cache, () => ({ lastAt, tokens, window, model }))
+      await update($, last, () => null)
+      await update($, spend, () => ({ usd: null, cold: 0, pendingCold: e.prompt_cache_likely_expired === true }))
+      await measureSpend($).catch(() => undefined)
     }
     return r
   }).catch(($, e, next) => next(e)) // a band that fails to seed never holds up the session
@@ -177,6 +216,11 @@ export const register: Register = on => {
   on('turn.step', async function* ($, e, next) {
     if (!e.agentId) {
       const now = await $.clock.now()
+      const before = await read($, cache)
+      // A request that finds the cache past its hour re-writes the whole context.
+      if (before && before.lastAt > 0 && now - before.lastAt >= TTL_MS) {
+        await update($, spend, s => ({ ...s, pendingCold: true }))
+      }
       await update($, cache, c => ({ lastAt: now, tokens: c?.tokens ?? 0, window: c?.window ?? 0, model: c?.model ?? null }))
     }
     yield* next(e)
@@ -190,6 +234,19 @@ export const register: Register = on => {
     // turn.step stamps the exact request time; when no step of this turn did, the turn's end is the floor.
     const lastAt = !c || now - c.lastAt > e.durationMs ? now : c.lastAt
     await measureCache($, lastAt, e.usage?.model ?? null)
+    await measureSpend($).catch(() => undefined)
+    const u = e.usage
+    if (u) {
+      await update($, last, () => ({ read: u.cache_read_input_tokens, write: u.cache_creation_input_tokens, input: u.input_tokens }))
+    }
+    const s = await read($, spend)
+    if (s.pendingCold && u) {
+      const m = MODELS.find(x => x.id === familyOf(u.model))
+      const extra = m ? coldCost(m, u.cache_creation_input_tokens) : 0
+      await update($, spend, x => ({ ...x, cold: x.cold + extra, pendingCold: false }))
+    } else if (s.pendingCold) {
+      await update($, spend, x => ({ ...x, pendingCold: false }))
+    }
     return r
   })
 
@@ -204,7 +261,7 @@ export const register: Register = on => {
     const p: Palette = PALETTE[await read($, tone)]
     const list = await read($, windows)
     const now = await $.clock.now()
-    const view = viewOf(await read($, cache), now)
+    const view = viewOf(await read($, cache), now, await read($, last), await read($, spend))
     const columns = e.props.bodyColumns ?? e.viewport?.columns ?? 100
 
     const label = (
@@ -236,11 +293,16 @@ export const register: Register = on => {
     const summaryCells = sum ? 1 + len(sum.lead) + (sum.rest ? 3 + len(sum.rest) : 0) : 0
     // On desktop an open card carries the badge itself, so the row drops it; the terminal keeps it.
     const inlineCache = view !== null && !(open && Svg)
+    const ctxWide = view ? ctxOf(view, CELLS) : null
+    const spendText = view && view.spend !== null ? usd(view.spend) : null
+    const extra =
+      (ctxWide ? len('CTX ') + CELLS + 1 + len(`${ctxWide.pct}%`) + 3 : 0) + (spendText ? len('SESSION ') + len(spendText) + 3 : 0)
     const plan = planOf(
       list.map(w => partOf(w, CELLS, now)),
       inlineCache ? badgeCells + summaryCells : 0,
       view !== null,
       columns,
+      extra,
     )
     const cells = plan.kind === 'tight' ? TIGHT_CELLS : CELLS
     const parts = list.map(w => partOf(w, cells, now))
@@ -279,6 +341,49 @@ export const register: Register = on => {
       ? parts.map(plan.kind === 'wide' ? wide : stacked)
       : [<Box key="nowin" flexShrink={0} marginRight={3}><Text color={p.muted}>no usage windows on this plan</Text></Box>]
 
+    // Context fill and session spend, in the same shape as the windows.
+    const meters = (shape: 'wide' | 'stacked' | 'tight') => {
+      const c = view ? ctxOf(view, cells) : null
+      const out = []
+      if (c) {
+        const hot = c.high ? p.amber : p.ink
+        const bar = [
+          <Text key="on" color={hot}>{'●'.repeat(c.on)}</Text>,
+          <Text key="off" color={p.empty}>{'●'.repeat(c.off)}</Text>,
+        ]
+        out.push(
+          shape === 'stacked' ? (
+            <Box key="ctx" flexDirection="column" flexShrink={0} marginRight={3}>
+              <Box flexDirection="row"><Text color={p.muted}>CTX </Text>{bar}</Box>
+              <Text color={hot} bold>{c.pct}% full</Text>
+            </Box>
+          ) : (
+            <Box key="ctx" flexDirection="row" flexShrink={0} marginRight={3}>
+              <Text color={p.muted}>CTX </Text>
+              {bar}
+              <Text color={hot} bold> {c.pct}%</Text>
+            </Box>
+          ),
+        )
+      }
+      if (spendText) {
+        out.push(
+          shape === 'stacked' ? (
+            <Box key="spend" flexDirection="column" flexShrink={0} marginRight={3}>
+              <Text color={p.muted}>SESSION</Text>
+              <Text color={p.ink} bold>{spendText}</Text>
+            </Box>
+          ) : (
+            <Box key="spend" flexDirection="row" flexShrink={0} marginRight={3}>
+              <Text color={p.muted}>SESSION </Text>
+              <Text color={p.ink} bold>{spendText}</Text>
+            </Box>
+          ),
+        )
+      }
+      return out
+    }
+
     // Before the first reply there is no cache to show: the windows alone.
     if (!view || !sum) {
       return (
@@ -303,8 +408,8 @@ export const register: Register = on => {
     ]
 
     const button = (
-      <Box key="fold" flexShrink={0} alignItems="flex-start" marginTop="xs">
-        <Button key="cache-fold" label={open ? 'Hide' : 'Show'} onPress={toggle} />
+      <Box key="fold" flexShrink={0} alignSelf="flex-start" marginTop="xs">
+        <Button key="cache-fold" plain label={open ? CHEVRON.open : CHEVRON.closed} onPress={toggle} />
       </Box>
     )
     const grow = <Box key="grow" flexGrow={1} />
@@ -315,6 +420,7 @@ export const register: Register = on => {
         <Box key="row" flexDirection="row" paddingX={1} paddingY="xs" alignItems="center">
           {label}
           {usage}
+          {meters('wide')}
           {inlineCache ? (
             <Box key="inline" flexDirection="row" flexShrink={0} marginRight={2} alignItems="center">
               {badge}
@@ -331,6 +437,7 @@ export const register: Register = on => {
         <Box key="row" flexDirection="row" paddingX={1} paddingY="xs">
           {label}
           {usage}
+          {meters('stacked')}
           {inlineCache ? (
             <Box key="block" flexDirection="column" flexShrink={0} marginRight={2}>
               <Box flexDirection="row" alignItems="center">{badge}</Box>
@@ -348,12 +455,15 @@ export const register: Register = on => {
         <Box key="row" flexDirection="row" paddingX={1} paddingY="xs">
           {label}
           {usage}
+          {grow}
+          {button}
+        </Box>,
+        <Box key="meters" flexDirection="row" paddingX={1} paddingY="xs">
+          {meters('tight')}
         </Box>,
         <Box key="cache" flexDirection="row" paddingX={1} paddingY="xs" alignItems="center">
           {badge}
           {summary}
-          {grow}
-          {button}
         </Box>,
       ]
     }
@@ -385,6 +495,21 @@ export const register: Register = on => {
           {line('size', cold ? 'Re-sent' : 'In cache', [
             <Text key="v" color={p.ink} bold>{tok(view.tokens)} tokens</Text>,
             share ? <Text key="s" color={p.muted}>{` · ${share}`}</Text> : null,
+          ])}
+          {line('turn', 'Last turn', [
+            view.hit === null ? (
+              <Text key="v" color={p.muted}>no turn yet</Text>
+            ) : (
+              <Text key="v" color={view.hit * 100 >= HIT_OK ? p.sage : p.amber} bold>{`${Math.round(view.hit * 100)}% read from cache`}</Text>
+            ),
+          ])}
+          {line('spend', 'Session', [
+            view.spend === null ? (
+              <Text key="v" color={p.muted}>cost unknown</Text>
+            ) : (
+              <Text key="v" color={p.ink} bold>{usd(view.spend)}</Text>
+            ),
+            view.spend !== null && view.cold > 0 ? <Text key="s" color={p.muted}>{` · ${usd(view.cold)} from cold re-writes`}</Text> : null,
           ])}
           {line('cost', 'Next msg', MODELS.map((m, i) => {
             const isMine = m.id === mine?.id
