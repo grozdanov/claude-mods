@@ -169,7 +169,7 @@ const text = (x: number, y: number, s: string, o: TextOpts): string =>
 const r1 = (n: number): number => Math.round(n * 10) / 10
 
 /** An overline: tiny, semibold, uppercase, tracked. The one place the band uses capitals for words. */
-const overline = (x: number, y: number, s: string, p: Palette): string => text(x, y, s, { size: 10, weight: 600, fill: p.muted, tracking: 0.08 })
+const overline = (x: number, y: number, s: string, p: Palette): string => text(x, y, s, { size: 12, weight: 600, fill: p.muted, tracking: 0.08 })
 
 /** A slim rounded track with a filled share, the card's one kind of meter. */
 const track = (x: number, y: number, w: number, share: number, fill: string, p: Palette): string => {
@@ -251,7 +251,7 @@ export const bandPx = (columns: number): number => (columns + 5) * 12
 
 const PAD = 12 // outer margin and the gap between zones
 const IN = 16 // inner padding of a zone
-const ZONE_H = 120
+const ZONE_H = 136
 
 export const cardSvg = (v: CacheView, W: number, p: Palette): { source: string; w: number; h: number; alt: string } => {
   const cold = v.mode === 'cold'
@@ -265,12 +265,12 @@ export const cardSvg = (v: CacheView, W: number, p: Palette): { source: string; 
     const cw = w - IN * 2
     let g = zone(x, y, w, ZONE_H)
     g += roboShapes(cx - 2, y + 12, 18, v.mode, p)
-    const chip = chipShapes(cx + 20, y + 12, WORD[v.mode], hue, p.onAccent, 10)
-    g += chip.svg + overline(cx + 20 + chip.w + 8, y + 25, 'IDLE', p)
-    g += text(cx, y + 66, v.idle, { size: 30, weight: 500, fill: p.ink, tracking: -0.02 })
-    g += track(cx, y + 80, cw, cold ? 0 : v.leftMin / TTL_MIN, hue, p)
-    g += text(cx, y + 104, cold ? 'cache expired' : `cold in ${v.leftMin}m`, { size: 12, weight: 500, fill: hue })
-    g += text(cx + cw, y + 104, '1h after a reply', { size: 12, fill: p.muted, anchor: 'end' })
+    const chip = chipShapes(cx + 20, y + 12, WORD[v.mode], hue, p.onAccent, 12)
+    g += chip.svg + overline(cx + 20 + chip.w + 8, y + 27, 'IDLE', p)
+    g += text(cx, y + 70, v.idle, { size: 30, weight: 500, fill: p.ink, tracking: -0.02 })
+    g += track(cx, y + 86, cw, cold ? 0 : v.leftMin / TTL_MIN, hue, p)
+    g += text(cx, y + 116, cold ? 'cache expired' : `cold in ${v.leftMin}m`, { size: 14, weight: 500, fill: hue })
+    g += text(cx + cw, y + 116, '1h after a reply', { size: 14, fill: p.muted, anchor: 'end' })
     return g
   }
 
@@ -280,12 +280,12 @@ export const cardSvg = (v: CacheView, W: number, p: Palette): { source: string; 
     const cw = w - IN * 2
     const share = v.window > 0 ? Math.min(1, v.tokens / v.window) : 0
     let g = zone(x, y, w, ZONE_H)
-    g += overline(cx, y + 25, cold ? 'RE-SENT IN FULL' : 'IN CACHE', p)
+    g += overline(cx, y + 27, cold ? 'RE-SENT IN FULL' : 'IN CACHE', p)
     g +=
-      `<text x="${cx}" y="${y + 66}" fill="${p.ink}"><tspan font-size="30" font-weight="500" letter-spacing="-0.02em">${tok(v.tokens)}</tspan>` +
-      `<tspan font-size="13" font-weight="400" fill="${p.muted}" dx="6">tokens</tspan></text>`
-    g += track(cx, y + 80, cw, share, p.ink, p)
-    g += text(cx, y + 104, v.window > 0 ? `${Math.round(share * 100)}% of the ${tok(v.window)} context` : 'context window unknown', { size: 12, fill: p.muted })
+      `<text x="${cx}" y="${y + 70}" fill="${p.ink}"><tspan font-size="30" font-weight="500" letter-spacing="-0.02em">${tok(v.tokens)}</tspan>` +
+      `<tspan font-size="15" font-weight="400" fill="${p.muted}" dx="6">tokens</tspan></text>`
+    g += track(cx, y + 86, cw, share, p.ink, p)
+    g += text(cx, y + 116, v.window > 0 ? `${Math.round(share * 100)}% of the ${tok(v.window)} context` : 'context window unknown', { size: 14, fill: p.muted })
     return g
   }
 
@@ -295,20 +295,20 @@ export const cardSvg = (v: CacheView, W: number, p: Palette): { source: string; 
     const cx = x + IN
     const cw = w - IN * 2
     let g = zone(x, y, w, h)
-    g += overline(cx, y + 25, cold ? 'NEXT MESSAGE COSTS' : 'NEXT MESSAGE COSTS, CACHED', p)
+    g += overline(cx, y + 27, cold ? 'NEXT MESSAGE COSTS' : 'NEXT MESSAGE COSTS, CACHED', p)
     const top = Math.max(...MODELS.map(m => coldCost(m, v.tokens)))
-    const nameW = 84
-    const priceW = 52
+    const nameW = 104
+    const priceW = 60
     const barX = cx + nameW
     const barW = Math.max(24, cw - nameW - priceW - 8)
     MODELS.forEach((m, i) => {
       const mine = m.id === v.mine
-      const by = y + 48 + i * 19
+      const by = y + 54 + i * 22
       const cost = costOf(m, v.mode, v.tokens)
-      g += text(cx, by, m.name, { size: 12, weight: mine ? 600 : 400, fill: mine ? p.ink : p.muted })
-      if (mine) g += chipShapes(Math.round(cx + measure(m.name, 12, 600) + 6), by - 11, 'YOU', hue, p.onAccent, 8).svg
-      g += track(barX, by - 5, barW, top > 0 ? cost / top : 0, mine ? hue : mix(p.muted, p.bg, 0.3), p)
-      g += text(cx + cw, by, usd(cost), { size: 12, weight: mine ? 600 : 400, fill: mine ? p.ink : p.muted, anchor: 'end' })
+      g += text(cx, by, m.name, { size: 14, weight: mine ? 600 : 400, fill: mine ? p.ink : p.muted })
+      if (mine) g += chipShapes(Math.round(cx + measure(m.name, 14, 600) + 6), by - 13, 'YOU', hue, p.onAccent, 10).svg
+      g += track(barX, by - 6, barW, top > 0 ? cost / top : 0, mine ? hue : mix(p.muted, p.bg, 0.3), p)
+      g += text(cx + cw, by, usd(cost), { size: 14, weight: mine ? 600 : 400, fill: mine ? p.ink : p.muted, anchor: 'end' })
     })
     return g
   }
@@ -331,7 +331,7 @@ export const cardSvg = (v: CacheView, W: number, p: Palette): { source: string; 
     H = ZONE_H * 3 + PAD * 2
     g = zoneIdle(PAD, 0, inner) + zoneSize(PAD, ZONE_H + PAD, inner) + zoneCost(PAD, (ZONE_H + PAD) * 2, inner, ZONE_H)
   }
-  const top = 4
+  const top = 6
   const h = top + H + PAD
   const body = `<rect width="${W}" height="${h}" fill="${p.bg}"/><g transform="translate(0 ${top})">${g}</g>`
   const mine = mineModel(v)

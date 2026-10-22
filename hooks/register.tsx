@@ -215,7 +215,7 @@ export const register: Register = on => {
 
     if (list.length === 0 && !view) {
       return (
-        <Box flexDirection="row" backgroundColor={p.bg} paddingX={1}>
+        <Box flexDirection="row" backgroundColor={p.bg} paddingX={1} paddingY="xs">
           {label}
           <Text color={p.muted}>waiting for the first reply</Text>
         </Box>
@@ -282,7 +282,7 @@ export const register: Register = on => {
     // Before the first reply there is no cache to show: the windows alone.
     if (!view || !sum) {
       return (
-        <Box flexDirection="row" backgroundColor={p.bg} paddingX={1}>
+        <Box flexDirection="row" backgroundColor={p.bg} paddingX={1} paddingY="xs">
           {label}
           {usage}
         </Box>
@@ -303,7 +303,7 @@ export const register: Register = on => {
     ]
 
     const button = (
-      <Box key="fold" flexShrink={0} alignItems="flex-start">
+      <Box key="fold" flexShrink={0} alignItems="flex-start" marginTop="xs">
         <Button key="cache-fold" label={open ? 'Hide' : 'Show'} onPress={toggle} />
       </Box>
     )
@@ -312,7 +312,7 @@ export const register: Register = on => {
     let rows
     if (plan.kind === 'wide') {
       rows = (
-        <Box key="row" flexDirection="row" paddingX={1} alignItems="center">
+        <Box key="row" flexDirection="row" paddingX={1} paddingY="xs" alignItems="center">
           {label}
           {usage}
           {inlineCache ? (
@@ -328,7 +328,7 @@ export const register: Register = on => {
     } else if (plan.kind === 'stacked') {
       // The cache becomes a third block, the same shape as 7D and 5H.
       rows = (
-        <Box key="row" flexDirection="row" paddingX={1}>
+        <Box key="row" flexDirection="row" paddingX={1} paddingY="xs">
           {label}
           {usage}
           {inlineCache ? (
@@ -345,11 +345,11 @@ export const register: Register = on => {
     } else {
       // Narrow: the cache gets its own row under the usage blocks.
       rows = [
-        <Box key="row" flexDirection="row" paddingX={1}>
+        <Box key="row" flexDirection="row" paddingX={1} paddingY="xs">
           {label}
           {usage}
         </Box>,
-        <Box key="cache" flexDirection="row" paddingX={1} alignItems="center">
+        <Box key="cache" flexDirection="row" paddingX={1} paddingY="xs" alignItems="center">
           {badge}
           {summary}
           {grow}
