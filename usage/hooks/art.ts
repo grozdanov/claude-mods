@@ -258,11 +258,11 @@ export const roboSvg = (mode: Mode, p: Palette): string => svgDoc(ROBO_SIZE, ROB
 export const cardScale = (W: number): number => (W >= 900 ? 1.45 : W >= 640 ? 1.2 : 1)
 
 /**
- * The band's width in CSS pixels for a column count: a cell is about 12 px in
- * the app's code font, and the engine keeps five cells for its [-]. Rounds down,
+ * The band's width in CSS pixels for a column count: a cell is about 9 to 12 px in
+ * the app's code font, so this takes the narrow end, and the engine keeps five cells for its [-]. Rounds down,
  * so the card never runs past the slot.
  */
-export const bandPx = (columns: number): number => (columns + 5) * 12
+export const bandPx = (columns: number): number => Math.floor((columns + 5) * 9)
 
 const PAD = 12 // outer margin and the gap between zones
 

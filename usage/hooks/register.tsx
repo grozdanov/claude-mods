@@ -456,7 +456,7 @@ export const register: Register = on => {
       const c = cardSvg(view, bandPx(columns), p)
       card = (
         <Box key="card" flexDirection="row">
-          <Svg source={c.source} alt={c.alt} width={c.w} height={c.h} isInteractive={!cold} />
+          <Svg source={c.source} alt={c.alt} width={c.w} isInteractive={!cold} />
         </Box>
       )
     } else if (open) {
