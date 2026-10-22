@@ -272,82 +272,93 @@ export const cardSvg = (v: CacheView, W: number, p: Palette): { source: string; 
   const k = cardScale(W)
   const n = (px: number): number => Math.round(px * k)
   const IN = n(16)
-  const ZONE_H = n(136)
   const zone = (x: number, y: number, w: number, h: number) =>
     `<rect x="${r1(x)}" y="${r1(y)}" width="${r1(w)}" height="${h}" rx="8" fill="${p.ink}" fill-opacity="${p.zoneAlpha}"/>`
   const OV = n(12)
   const BIG = n(30)
   const BODY = n(14)
   const BAR = Math.max(4, n(5))
+  // Every card is the same height.
+  const CARD_H = n(96)
 
-  // A big figure with its small unit beside it, each placed from the font's own advances.
-  const bigWith = (x: number, y: number, big: string, unit: string): string =>
-    text(x, y, big, { size: BIG, weight: 500, fill: p.ink, tracking: -0.02 }) +
-    text(x + measure(big, BIG, 500, -0.02) + n(8), y, unit, { size: n(15), fill: p.muted })
+  // A zone's headline figure and its small unit, top right, each placed from the font's own advances.
+  const headline = (x: number, y: number, w: number, big: string, unit: string): string => {
+    const uw = unit ? measure(unit, n(15), 400) + n(8) : 0
+    const right = x + w - IN
+    return (
+      text(right - uw, y + n(37), big, { size: BIG, weight: 500, fill: p.ink, tracking: -0.02, anchor: 'end' }) +
+      (unit ? text(right, y + n(37), unit, { size: n(15), fill: p.muted, anchor: 'end' }) : '')
+    )
+  }
 
   // How long since the last reply, and how much of the warm hour is left.
-  const zoneIdle = (x: number, y: number, w: number) => {
+  const zoneIdle = (x: number, y: number, w: number, h: number) => {
     const cx = x + IN
     const cw = w - IN * 2
-    let g = zone(x, y, w, ZONE_H)
+    let g = zone(x, y, w, h)
     g += roboShapes(cx - 2, y + n(12), n(18), v.mode, p)
     const chip = chipShapes(cx + n(20), y + n(12), WORD[v.mode], hue, p.onAccent, n(12))
     g += chip.svg + overline(cx + n(20) + chip.w + 8, y + n(27), 'IDLE', p, OV)
-    g += text(cx, y + n(70), v.idle, { size: BIG, weight: 500, fill: p.ink, tracking: -0.02 })
-    g += track(cx, y + n(86), cw, cold ? 0 : v.leftMin / TTL_MIN, hue, p, BAR)
-    g += text(cx, y + n(116), cold ? 'cache expired' : `cold in ${v.leftMin}m`, { size: BODY, weight: 500, fill: hue })
-    g += text(cx + cw, y + n(116), '1h after a reply', { size: BODY, fill: p.muted, anchor: 'end' })
+    g += headline(x, y, w, v.idle, '')
+    g += track(cx, y + h - n(40), cw, cold ? 0 : v.leftMin / TTL_MIN, hue, p, BAR)
+    g += text(cx, y + h - n(14), cold ? 'cache expired' : `cold in ${v.leftMin}m`, { size: BODY, weight: 500, fill: hue })
+    g += text(cx + cw, y + h - n(14), '1h after a reply', { size: BODY, fill: p.muted, anchor: 'end' })
     return g
   }
 
   // How much the cache holds, as a share of the context window.
-  const zoneSize = (x: number, y: number, w: number) => {
+  const zoneSize = (x: number, y: number, w: number, h: number) => {
     const cx = x + IN
     const cw = w - IN * 2
     const share = v.window > 0 ? Math.min(1, v.tokens / v.window) : 0
-    let g = zone(x, y, w, ZONE_H)
+    let g = zone(x, y, w, h)
     g += overline(cx, y + n(27), cold ? 'RE-SENT IN FULL' : 'IN CACHE', p, OV)
-    g += bigWith(cx, y + n(70), tok(v.tokens), 'tokens')
-    g += track(cx, y + n(86), cw, share, share * 100 >= CTX_AT ? p.amber : p.ink, p, BAR)
-    g += text(cx, y + n(116), v.window > 0 ? `${Math.round(share * 100)}% of the ${tok(v.window)} context` : 'context window unknown', { size: BODY, fill: p.muted })
+    g += headline(x, y, w, tok(v.tokens), 'tokens')
+    g += track(cx, y + h - n(40), cw, share, share * 100 >= CTX_AT ? p.amber : p.ink, p, BAR)
+    g += text(cx, y + h - n(14), v.window > 0 ? `${Math.round(share * 100)}% of the ${tok(v.window)} context` : 'context window unknown', { size: BODY, fill: p.muted })
     return g
   }
 
   // How well the last turn used the cache, and what the session has cost.
-  const zoneTurn = (x: number, y: number, w: number) => {
+  const zoneTurn = (x: number, y: number, w: number, h: number) => {
     const cx = x + IN
     const cw = w - IN * 2
     const hit = v.hit
     const ok = hit !== null && hit * 100 >= HIT_OK
-    let g = zone(x, y, w, ZONE_H)
+    let g = zone(x, y, w, h)
     g += overline(cx, y + n(27), 'LAST TURN', p, OV)
-    g += bigWith(cx, y + n(70), hit === null ? '–' : `${Math.round(hit * 100)}%`, 'from cache')
-    g += track(cx, y + n(86), cw, hit ?? 0, ok ? p.sage : p.amber, p, BAR)
+    g += headline(x, y, w, hit === null ? '–' : `${Math.round(hit * 100)}%`, 'from cache')
+    g += track(cx, y + h - n(40), cw, hit ?? 0, ok ? p.sage : p.amber, p, BAR)
     const spent = v.spend === null ? 'session cost unknown' : `session ${usd(v.spend)}${v.cold > 0 ? ` · ${usd(v.cold)} re-writes` : ''}`
-    g += text(cx, y + n(116), spent, { size: BODY, fill: p.muted })
+    g += text(cx, y + h - n(14), spent, { size: BODY, fill: p.muted })
     return g
   }
 
-  // What the next message costs on each model. One scale for both states (the
-  // dearest cold re-cache), so a warm read shows as the small bar it is.
+  // What the next message costs on each model: per model, the cost over the name,
+  // then a column that runs the chart's full height. One scale for both states (the
+  // dearest cold re-cache), so a warm read shows as the small column it is.
   const zoneCost = (x: number, y: number, w: number, h: number) => {
     const cx = x + IN
     const cw = w - IN * 2
     let g = zone(x, y, w, h)
     g += overline(cx, y + n(27), cold ? 'NEXT MESSAGE COSTS' : 'NEXT, CACHED', p, OV)
     const top = Math.max(...MODELS.map(m => coldCost(m, v.tokens)))
-    const nameW = n(104)
-    const priceW = n(60)
-    const barX = cx + nameW
-    const barW = Math.max(24, cw - nameW - priceW - 8)
+    const pw = cw / MODELS.length
+    const colW = n(14)
+    const chartTop = y + n(40)
+    const chartBottom = y + h - n(14)
+    const chartH = chartBottom - chartTop
     MODELS.forEach((m, i) => {
       const mine = m.id === v.mine
-      const by = y + n(54) + i * n(22)
+      const x0 = cx + i * pw
       const cost = costOf(m, v.mode, v.tokens)
-      g += text(cx, by, m.name, { size: BODY, weight: mine ? 600 : 400, fill: mine ? p.ink : p.muted })
-      if (mine) g += chipShapes(Math.round(cx + measure(m.name, BODY, 600) + 6), by - n(13), 'YOU', hue, p.onAccent, n(10)).svg
-      g += track(barX, by - n(6), barW, top > 0 ? cost / top : 0, mine ? hue : mix(p.muted, p.bg, 0.3), p, BAR)
-      g += text(cx + cw, by, usd(cost), { size: BODY, weight: mine ? 600 : 400, fill: mine ? p.ink : p.muted, anchor: 'end' })
+      const tw = Math.max(measure(usd(cost), BODY, mine ? 600 : 400), measure(m.name, BODY, mine ? 600 : 400))
+      const bx = Math.min(x0 + tw + n(10), x0 + pw - colW - n(4))
+      const bh = top > 0 ? Math.max(3, Math.round((cost / top) * chartH)) : 3
+      g += text(x0, chartTop + BODY, usd(cost), { size: BODY, weight: mine ? 600 : 400, fill: mine ? p.ink : p.muted })
+      g += text(x0, chartBottom, m.name, { size: BODY, weight: mine ? 600 : 400, fill: mine ? p.ink : p.muted })
+      g += `<rect x="${r1(bx)}" y="${r1(chartTop)}" width="${colW}" height="${r1(chartH)}" rx="3" fill="${p.empty}"/>`
+      g += `<rect x="${r1(bx)}" y="${r1(chartBottom - bh)}" width="${colW}" height="${bh}" rx="3" fill="${mine ? hue : mix(p.muted, p.bg, 0.3)}"/>`
     })
     return g
   }
@@ -355,13 +366,13 @@ export const cardSvg = (v: CacheView, W: number, p: Palette): { source: string; 
   // Always a 2 x 2 grid: idle and cache on top, last turn and cost beneath.
   const inner = W - PAD * 2
   const half = (inner - PAD) / 2
-  const H = ZONE_H * 2 + PAD
+  const H = CARD_H * 2 + PAD
   const g =
-    zoneIdle(PAD, 0, half) +
-    zoneSize(PAD + half + PAD, 0, half) +
-    zoneTurn(PAD, ZONE_H + PAD, half) +
-    zoneCost(PAD + half + PAD, ZONE_H + PAD, half, ZONE_H)
-  const top = 6
+    zoneIdle(PAD, 0, half, CARD_H) +
+    zoneSize(PAD + half + PAD, 0, half, CARD_H) +
+    zoneTurn(PAD, CARD_H + PAD, half, CARD_H) +
+    zoneCost(PAD + half + PAD, CARD_H + PAD, half, CARD_H)
+  const top = 0
   const h = top + H + PAD
   const body = `<rect width="${W}" height="${h}" fill="${p.bg}"/><g transform="translate(0 ${top})">${g}</g>`
   const mine = mineModel(v)
