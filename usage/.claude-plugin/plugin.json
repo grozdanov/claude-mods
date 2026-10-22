@@ -1,6 +1,6 @@
 {
   "name": "usage",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "A calm band above the prompt: how much of your 7-day and 5-hour usage is left, when each resets, and whether the prompt cache is warm or cold with what the next message costs.",
   "author": { "name": "Nikolay G" },
   "license": "MIT",
